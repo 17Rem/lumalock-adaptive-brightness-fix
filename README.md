@@ -31,6 +31,16 @@ Different device serial numbers and manufacturing dates are allowed. Firmware or
 
 ## Quick start
 
+### Windows portable download / 免安装版
+
+Download **`LumaLock-0.2.1-windows-x64.zip`** from [GitHub Releases](https://github.com/17Rem/lumalock-adaptive-brightness-fix/releases/latest), extract the entire archive, and double-click **`LumaLock.exe`**. **Python is not required.** Keep the `_internal` folder beside the executable. Select your monitor, check compatibility, then apply fixed high brightness.
+
+**Windows 用户下载 ZIP，完整解压后双击 `LumaLock.exe` 即可使用，无需安装 Python。** 在界面中选择屏幕，点击「检查兼容性」，通过后点击「固定高亮度」。使用说明与操作记录均可在侧栏切换。
+
+The portable build targets Windows 10/11 x64. Your GPU driver is still required; Intel additionally needs the official IGCL runtime. This community build is unsigned. `SHA256SUMS.txt` on the release page lets you verify the downloaded ZIP. Settings remain volatile: closing the app preserves the active curve, but a panel reset may require applying it again. This release does not add automatic startup.
+
+### Run from source
+
 Use **64-bit Python 3.10 or newer** and your GPU's driver. No pip packages are required. Intel additionally requires the official IGCL runtime. Download and extract the source.
 
 ### Graphical interface / 图形界面

@@ -72,8 +72,10 @@ def run(action,display_id=None,backend='auto',on_progress=None):
         state={'done':False,'deadline':time.time()+360,'lut_write_started':False,
                'bank_started':False,'range_opened':False,'target_pin':t.target_pin}
         b.atomic_json(statepath,state)
-        watch=subprocess.Popen([sys.executable,'-X','utf8','-B','-m','lumalock','--guard',str(statepath)],
-            cwd=str(p.ROOT),**runtime_platform.detached_options(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        watch=subprocess.Popen(runtime_platform.guard_command(statepath),
+            cwd=str(p.ROOT),env=runtime_platform.guard_environment(),
+            **runtime_platform.detached_options(),stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         armed=True;t.xfer(0,0x102,b'\xc0')
         print(f"已识别兼容候选屏幕 {t.target_pin.get('endpoint_id',hex(t.display))}，正在核验固件与原始曲线。",flush=True)
         def mark_bank():

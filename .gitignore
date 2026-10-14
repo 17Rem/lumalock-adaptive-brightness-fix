@@ -27,3 +27,5 @@ brightness-control-*.json
 Thumbs.db
 .idea/
 .vscode/
+build/
+dist/

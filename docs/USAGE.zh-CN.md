@@ -12,6 +12,17 @@ Windows NVIDIA 已实机验证。Windows AMD、Intel 和原生 Linux 已有实�
 
 ## 2. 准备环境
 
+### Windows 免安装版（推荐）
+
+1. 在 [Releases 下载页](https://github.com/17Rem/lumalock-adaptive-brightness-fix/releases/latest)下载 `LumaLock-0.2.1-windows-x64.zip`，适用于 Windows 10/11 x64。
+2. 完整解压后双击 `LumaLock.exe`，无需安装 Python。必须保留旁边的 `_internal` 文件夹，不要仅复制 EXE，也不要在压缩包内直接运行。
+3. 保持显卡驱动已安装。Intel 另需官方 IGCL；AMD、Intel 仍属实验性支持。
+4. 选择屏幕并检查兼容性，通过后点击「固定高亮度」。关闭程序不会自动恢复曲线；屏幕断电或重置后可能需要再次应用。本版不添加开机启动。
+
+发布包尚未进行代码签名。下载页提供 `SHA256SUMS.txt`，可以用 PowerShell 的 `Get-FileHash .\LumaLock-0.2.1-windows-x64.zip -Algorithm SHA256` 核对下载文件。
+
+### 从源码运行
+
 1. 安装 64 位 Python 3.10 或更新版本，并让 `py` 或 `python`（Linux 为 `python3`）命令可用。
 2. 安装显卡驱动。Intel 另需官方 IGCL 的 `ControlLib.dll`，涉及 AUX 写入时需管理员权限。
 3. 下载并解压完整项目，保持目录结构。无需安装 pip 依赖。
@@ -21,7 +32,7 @@ Windows 启动脚本会优先使用 `py -3`，否则使用 `python`。若系统�
 
 ## 3. 使用图形界面（推荐）
 
-Windows 双击根目录的 **`LumaLock.pyw`**，无需输入命令。它使用 Python 安装时提供的 `.pyw` 文件关联；如果系统未配置文件关联，可双击 `run.cmd`，或运行 `python -m lumalock gui`。Linux 桌面环境运行 `sh ./run.sh gui`。
+Windows 免安装版双击 **`LumaLock.exe`**。源码版双击根目录的 **`LumaLock.pyw`**，无需输入命令。它使用 Python 安装时提供的 `.pyw` 文件关联；如果系统未配置文件关联，可双击 `run.cmd`，或运行 `python -m lumalock gui`。Linux 桌面环境运行 `sh ./run.sh gui`。
 
 界面使用 Tkinter，不需要 pip 依赖。Windows 安装 Python 时应保留 Tcl/Tk 组件；部分 Linux 发行版需要单独安装 Tkinter，例如 Debian/Ubuntu 的 `python3-tk`。
 
