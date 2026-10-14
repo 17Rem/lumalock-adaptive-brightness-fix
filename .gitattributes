@@ -1,0 +1,9 @@
+* text=auto
+*.py text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+*.cmd text eol=crlf
+lumalock/profiles/*.json -text
+lumalock/vendor/gpu_aux/adl.py -text
+lumalock/vendor/gpu_aux/intel.py -text
+lumalock/vendor/gpu_aux/LICENSE -text

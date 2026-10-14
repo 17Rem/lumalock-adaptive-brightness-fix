@@ -1,0 +1,9 @@
+{
+  "upstream": "https://github.com/cnbright/gpu_aux",
+  "commit": "eda49e230b48a7a8b995b664a8a0756b2bde99f1",
+  "files": {
+    "adl.py": "e57a2dcbc0e96d91a0372714dcd1385fbe87a5dbc7026bd61e52a725ad906eae",
+    "intel.py": "1aea59a1f0997483d49503cf3dc3914f468b6792fbdcfa6aba1e56e9a664e585",
+    "LICENSE": "d82c165dfd7410851fa26e62e57f91dce3cd297e940e98797ccc492d6338c585"
+  }
+}
