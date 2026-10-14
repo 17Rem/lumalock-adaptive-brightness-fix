@@ -39,6 +39,8 @@ Use **64-bit Python 3.10 or newer** and your GPU's driver. No pip packages are r
 
 **Windows 用户双击 `LumaLock.pyw` 即可打开界面。** 选择屏幕后，点击「检查兼容性」「固定高亮度」或「恢复自适应」。界面使用黑白灰与荧光黄的工业信息设计，支持实际进度、操作记录和错误恢复状态。
 
+The frameless window has a draggable top bar, custom minimize/maximize/close buttons and a bottom-right resize grip. Buttons lift and change color on hover. Help and session logs are in-window pages; use the sidebar or `Ctrl+1/2/3` to switch without interrupting an operation.
+
 Linux: run `sh ./run.sh gui` in a desktop session. The GUI uses Tkinter; some Linux distributions package it separately (for example `python3-tk` on Debian/Ubuntu). The CLI remains usable without Tk.
 
 Progress is **per stage**: verified firmware blocks and completed write packets use actual counts. Connection, readback and cleanup show activity without inventing a percentage. Reaching 100% for writing does not mean the full operation is finished; wait for the final result. Actions and window closing are blocked while a transaction or its watchdog recovery is pending.

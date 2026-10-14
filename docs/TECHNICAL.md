@@ -42,6 +42,7 @@ Recovery is best effort: device removal, driver failure, system shutdown or seve
 | `runtime.py` | State location, locks and process options |
 | `progress.py` | Optional structured events; observer exceptions cannot interrupt hardware operations |
 | `gui.py` | Native Tk UI, one worker thread and queue-based progress delivery |
+| `widgets.py` | Animated native buttons and frameless window movement/resize controls |
 
 See [backend notes](BACKENDS.md) for platform requirements and transport differences. Only Windows NVIDIA has been tested on physical hardware so far.
 
@@ -52,3 +53,5 @@ The GUI uses the same `control.run()` transaction as the CLI. Tk widgets are upd
 Firmware progress advances only after a full block and both halves pass verification. Write progress advances only after each packet returns successfully. Recovery counts attempted packets and subsequently verifies the full original table. No overall percentage or completion ETA is fabricated. A write-stage 100% is followed by readback and cleanup; only the transaction's final result can produce a success state.
 
 The Windows `LumaLock.pyw` entry launches without a console. `python -m lumalock` with no arguments also opens the GUI; explicit CLI actions do not import Tk. GUI tests mock transport access and skip widget checks where Tk or a display server is unavailable.
+
+On Windows the frameless shell removes only the caption and sizing frame from its own native window. It remains managed by the window manager for taskbar, minimize/restore and maximize support. Other Tk desktop platforms use override-redirect with a managed transition for minimizing. The bottom-right grip provides resizing. Control, help and history are persistent frames, so navigation cannot recreate a transaction or discard progress. Hover animation changes presentation only and respects disabled button state.

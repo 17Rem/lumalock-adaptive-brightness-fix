@@ -2,6 +2,8 @@
 import queue
 import threading
 import unittest
+import os
+from types import SimpleNamespace
 from unittest.mock import patch
 
 try:
@@ -125,6 +127,65 @@ class GuiTests(unittest.TestCase):
             self.assertGreaterEqual(widget.winfo_height(),widget.winfo_reqheight())
             self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(),
                                  self.root.winfo_rooty()+self.root.winfo_height())
+
+    def test_help_and_history_switch_in_place_and_preserve_live_progress(self):
+        self.app.show_devices([self.candidate])
+        self.app.tasks.busy=True
+        self.app.set_controls()
+        self.app.update_progress(dict(stage='write',message='正在写入',completed=8,total=43))
+        with patch.object(gui.tk,'Toplevel') as popup:
+            self.app.nav['help'].invoke()
+            self.assertEqual(self.app.current_page,'help')
+            self.assertTrue(self.app.nav['help'].selected)
+            self.app.update_progress(dict(stage='write',message='正在写入',completed=21,total=43))
+            self.app.nav['details'].invoke()
+            self.app.add_log('保持进度')
+            self.assertIn('保持进度',self.app.history_text.get('1.0','end'))
+            self.app.nav['control'].invoke()
+            popup.assert_not_called()
+        self.assertEqual(self.app.percent['text'],'49%')
+        self.assertEqual(self.app.selected()['endpoint_id'],'nvidia:sample')
+        self.assertTrue(self.app.tasks.busy)
+        self.assertTrue(all(str(b['state'])=='disabled' for b in self.app.actions))
+
+    def test_hover_press_and_disabled_button(self):
+        button=self.app.refresh
+        normal=button.face.cget('bg')
+        button._hover(True)
+        self.assertNotEqual(button.face.cget('bg'),normal)
+        button._press()
+        self.assertEqual(button.face.place_info()['y'],'5')
+        button.configure(state='disabled')
+        with patch.object(self.app.tasks,'start') as start:
+            button._hover(True)
+            button.invoke()
+            start.assert_not_called()
+        self.assertEqual(button.level,0)
+        self.assertFalse(button.pressed)
+        self.assertEqual(button.face.cget('cursor'),'arrow')
+
+    def test_resize_clamps_to_minimum(self):
+        self.root.deiconify();self.root.update()
+        self.app.chrome.resize_start(SimpleNamespace(x_root=1000,y_root=800))
+        self.app.chrome.resize_move(SimpleNamespace(x_root=0,y_root=0))
+        self.root.update()
+        self.assertGreaterEqual(self.root.winfo_width(),self.root.minsize()[0])
+        self.assertGreaterEqual(self.root.winfo_height(),self.root.minsize()[1])
+
+    @unittest.skipUnless(os.name=='nt','Windows window-manager integration')
+    def test_frameless_minimize_restore_and_maximize(self):
+        self.root.deiconify();self.root.update()
+        chrome=self.app.chrome
+        self.assertFalse(chrome.user32.GetWindowLongW(chrome.hwnd(),-16)&0x00c40000)
+        chrome.minimize();self.root.update()
+        self.assertEqual(self.root.state(),'iconic')
+        self.root.deiconify();self.root.update()
+        self.assertEqual(self.root.state(),'normal')
+        self.assertFalse(chrome.user32.GetWindowLongW(chrome.hwnd(),-16)&0x00c40000)
+        chrome.toggle_maximize();self.root.update()
+        self.assertEqual(self.root.state(),'zoomed')
+        chrome.toggle_maximize();self.root.update()
+        self.assertEqual(self.root.state(),'normal')
 
 
 if __name__ == '__main__':

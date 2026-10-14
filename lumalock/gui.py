@@ -12,6 +12,7 @@ from tkinter import ttk, messagebox
 
 from . import compatibility, control, runtime
 from . import __version__
+from .widgets import HoverButton, WindowFrame
 
 BG = '#eeefeb'
 PAPER = '#fafbf7'
@@ -75,8 +76,8 @@ class App:
         self.blocked = False
         self.root.title('LumaLock · 便携屏亮度控制')
         self.root.configure(bg=BG)
-        self.root.geometry('1180x820')
-        self.root.minsize(1040, 760)
+        self.root.geometry('1180x858')
+        self.root.minsize(1040, 798)
         self.root.protocol('WM_DELETE_WINDOW', self.close)
         self.root.option_add('*Font', (FONT, 10))
         style = ttk.Style(root)
@@ -87,7 +88,11 @@ class App:
                   selectbackground=[('readonly', PAPER)], selectforeground=[('readonly', INK)])
         style.configure('Luma.Horizontal.TProgressbar', background=YELLOW,
                         troughcolor='#3b3f3d', borderwidth=0, lightcolor=YELLOW, darkcolor=YELLOW)
+        self.chrome = WindowFrame(root, self.close)
+        self.current_page = 'control'
         self._build()
+        for key,page in [('1','control'),('2','help'),('3','details')]:
+            self.root.bind('<Control-Key-'+key+'>',lambda e,p=page:self.show_page(p))
         self.poll_after = self.root.after(80, self.poll)
         self.scan_after = self.root.after(250, self.scan)
 
@@ -96,17 +101,29 @@ class App:
                         font=(MONO if mono else FONT, size, 'bold' if bold else 'normal'), **kw)
 
     def button(self, parent, text, command, primary=False, dark=False, **kw):
-        bg = YELLOW if primary else (INK if dark else PAPER)
-        fg = INK if not dark or primary else PAPER
-        return tk.Button(parent, text=text, command=command, bg=bg, fg=fg,
-                         activebackground='#d8ec4a' if primary else '#dfe4db',
-                         activeforeground=INK, disabledforeground='#8b928b',
-                         relief='flat', bd=0, cursor='hand2', padx=16, pady=10,
-                         highlightthickness=1, highlightbackground=LINE,
-                         highlightcolor=GREEN, font=(FONT, 10, 'bold'), **kw)
+        return HoverButton(parent,text,command,primary=primary,dark=dark,
+                           font=(FONT,10,'bold'),**kw)
 
     def _build(self):
-        side = tk.Frame(self.root, bg=INK, width=232)
+        titlebar = tk.Frame(self.root,bg=INK,height=38)
+        titlebar.pack(fill='x')
+        titlebar.pack_propagate(False)
+        title = self.label(titlebar,'◼  LUMALOCK / DISPLAY UTILITY',9,YELLOW,mono=True)
+        title.pack(side='left',padx=20)
+        self.chrome_status = self.label(titlebar,'就绪',9,'#a2aea2')
+        self.chrome_status.pack(side='left',padx=20)
+        self.window_buttons = []
+        for text,command in [('×',self.close),('□',self.chrome.toggle_maximize),('−',self.chrome.minimize)]:
+            btn = self.button(titlebar,text,command,dark=True,height=34)
+            btn.configure(width=46)
+            btn.pack(side='right',padx=(0,2))
+            self.window_buttons.append(btn)
+        self.chrome.bind_drag(titlebar)
+        self.chrome.bind_drag(title)
+        self.chrome.bind_drag(self.chrome_status)
+        shell = tk.Frame(self.root,bg=BG)
+        shell.pack(fill='both',expand=True)
+        side = tk.Frame(shell, bg=INK, width=232)
         side.pack(side='left', fill='y')
         side.pack_propagate(False)
         brand = tk.Canvas(side, width=180, height=76, bg=INK, highlightthickness=0)
@@ -118,20 +135,26 @@ class App:
         self.label(side, 'LUMA\nLOCK', 32, PAPER, bold=True, mono=True,
                    justify='left', anchor='w').pack(anchor='w', padx=26)
         self.label(side, '便携屏亮度控制', 11, '#b5bdb5').pack(anchor='w', padx=28, pady=(4, 30))
-        selected = tk.Frame(side, bg=YELLOW, height=55)
-        selected.pack(fill='x', padx=16)
-        self.label(selected, '01   亮度控制     ↗', 12, bold=True).pack(anchor='w', padx=16, pady=14)
-        self.button(side, '02   使用说明', self.help, dark=True, anchor='w').pack(fill='x', padx=16, pady=(10, 0))
-        self.button(side, '03   打开本地记录', self.logs, dark=True, anchor='w').pack(fill='x', padx=16, pady=6)
+        self.nav = {}
+        for page,text in [('control','01   亮度控制     ↗'),('help','02   使用说明     ↗'),('details','03   操作记录     ↗')]:
+            btn = self.button(side,text,lambda p=page:self.show_page(p),dark=True,anchor='w',height=52)
+            btn.pack(fill='x',padx=16,pady=(0,8))
+            self.nav[page] = btn
         foot = tk.Frame(side, bg=INK)
         foot.pack(side='bottom', fill='x', padx=28, pady=30)
         self.label(foot, 'DISPLAY / CONTROL', 10, YELLOW, mono=True).pack(anchor='w')
         tk.Frame(foot, height=1, bg='#464d46').pack(fill='x', pady=16)
         self.label(foot, '运行内存设置 · 无需刷固件', 9, '#b5bdb5').pack(anchor='w')
         self.label(foot, 'LUMALOCK  /  '+__version__, 10, '#8d968e', mono=True).pack(anchor='w', pady=(10, 0))
+        self.label(foot, 'CTRL 1–3 / 页面切换', 9, '#8d968e').pack(anchor='w',pady=(8,0))
 
-        main = tk.Frame(self.root, bg=BG)
-        main.pack(side='left', fill='both', expand=True, padx=32, pady=(26, 18))
+        self.content = tk.Frame(shell,bg=BG)
+        self.content.pack(side='left',fill='both',expand=True,padx=32,pady=(26,18))
+        self.content.rowconfigure(0,weight=1)
+        self.content.columnconfigure(0,weight=1)
+        main = tk.Frame(self.content, bg=BG)
+        main.grid(row=0,column=0,sticky='nsew')
+        self.pages = {'control':main}
         top = tk.Frame(main, bg=BG)
         top.pack(fill='x')
         self.label(top, '01 / BRIGHTNESS CONTROL', 10, MUTED, mono=True).pack(side='left')
@@ -211,15 +234,91 @@ class App:
         loghead = tk.Frame(main, bg=BG)
         loghead.pack(fill='x')
         self.label(loghead, '操作动态', 10, bold=True).pack(side='left')
-        detail_btn = tk.Button(loghead, text='查看详情  +', command=self.details, relief='flat', bd=0,
-                               bg=BG, fg=MUTED, activebackground=BG, cursor='hand2', font=(FONT, 9))
+        detail_btn = self.button(loghead,'查看详情  +',self.details,height=30)
         detail_btn.pack(side='right')
         tk.Frame(main, bg=LINE, height=1).pack(fill='x', pady=(7, 6))
         self.feed = self.label(main, '等待连接…', 9, MUTED, anchor='nw', justify='left')
         self.feed.pack(fill='both', expand=True)
         self.footer = self.label(main, '断电或休眠后若设置失效，重新应用即可。', 9, MUTED, anchor='w')
         self.footer.pack(side='bottom', fill='x', pady=(8, 0), before=loghead)
+        self._build_help()
+        self._build_details()
+        self.show_page('control')
+        self.grip = self.label(self.root,'◢',10,MUTED,bg=BG,cursor='size_nw_se')
+        self.grip.place(relx=1,rely=1,anchor='se',width=18,height=18)
+        self.grip.bind('<ButtonPress-1>',self.chrome.resize_start)
+        self.grip.bind('<B1-Motion>',self.chrome.resize_move)
         self.set_controls()
+
+    def _page_header(self,frame,kicker,title,subtitle):
+        self.label(frame,kicker,10,MUTED,mono=True).pack(anchor='w')
+        self.label(frame,title,27,bold=True).pack(anchor='w',pady=(8,3))
+        self.label(frame,subtitle,10,MUTED).pack(anchor='w',pady=(0,22))
+
+    def _build_help(self):
+        frame = tk.Frame(self.content,bg=BG)
+        self.pages['help'] = frame
+        self._page_header(frame,'02 / FIELD GUIDE','稳定亮度，从这里开始。',
+                          '选择屏幕 → 检查兼容性 → 应用高亮度')
+        for number,title,description in [
+            ('01','确认你的屏幕','在亮度控制页选择目标屏幕，点击「检查兼容性」。\n程序会核对型号、固件与曲线，检查本身不会改写亮度表。'),
+            ('02','固定高亮度','点击「固定高亮度」，等待写入、读回校验与状态检查完成。\n看到完成提示后即可使用；不用保持这个窗口一直打开。'),
+            ('03','随时恢复原始曲线','点击「恢复自适应」即可恢复原来的亮度行为。\n断电或休眠后设置可能失效，需要时重新应用高亮度。')]:
+            card = tk.Frame(frame,bg=PAPER)
+            card.pack(fill='x',pady=(0,12))
+            self.label(card,number,24,GREEN,bold=True,mono=True).pack(side='left',padx=20,pady=16)
+            copy = tk.Frame(card,bg=PAPER)
+            copy.pack(side='left',fill='x',expand=True,padx=(0,18),pady=14)
+            self.label(copy,title,13,bold=True).pack(anchor='w')
+            desc = self.label(copy,description,10,MUTED,justify='left',anchor='w')
+            desc.pack(fill='x',pady=(6,0))
+            copy.bind('<Configure>',lambda e,w=desc:w.configure(wraplength=max(100,e.width-4)))
+        note = tk.Frame(frame,bg=INK)
+        note.pack(fill='x',pady=(4,16))
+        self.label(note,'100% 写入完成 ≠ 整个操作结束',13,YELLOW,bold=True).pack(anchor='w',padx=20,pady=(16,6))
+        self.label(note,'进度按当前阶段计算。写完后还会读回校验，请等待最终完成提示。\n操作或恢复期间保持连接，不要另开显示器控制工具。',10,PAPER,
+                   justify='left').pack(anchor='w',padx=20,pady=(0,16))
+        self.label(frame,'适用：通过核验的 NE180QDM-NZ4 / NT71873。\nWindows NVIDIA 已实测；AMD、Intel、Linux 仍为实验性支持。',9,MUTED,
+                   justify='left').pack(anchor='w',pady=(0,16))
+        links = tk.Frame(frame,bg=BG)
+        links.pack(fill='x')
+        self.button(links,'返回亮度控制  ↗',lambda:self.show_page('control'),primary=True).pack(side='left')
+        self.button(links,'完整说明所在文件夹',lambda:open_folder(Path(__file__).resolve().parent.parent/'docs')).pack(side='left',padx=12)
+
+    def _build_details(self):
+        frame = tk.Frame(self.content,bg=BG)
+        self.pages['details'] = frame
+        self._page_header(frame,'03 / SESSION LOG','每一步，都有记录。','这里显示本次会话动态，完整诊断记录保存在本机。')
+        self.button(frame,'打开本地记录文件夹  ↗',self.logs).pack(anchor='w',side='bottom',pady=(12,0))
+        self.label(frame,'公开反馈前请移除本机路径、设备标识和原始数据。',9,MUTED).pack(anchor='w',side='bottom',pady=(12,0))
+        area = tk.Frame(frame,bg=PAPER)
+        area.pack(fill='both',expand=True)
+        self.history_text = tk.Text(area,bg=PAPER,fg=INK,relief='flat',wrap='word',
+                                    font=(FONT,10),padx=16,pady=16,state='disabled',height=12)
+        scroll = ttk.Scrollbar(area,command=self.history_text.yview)
+        scroll.pack(side='right',fill='y')
+        self.history_text.configure(yscrollcommand=scroll.set)
+        self.history_text.pack(fill='both',expand=True)
+
+    def show_page(self,page):
+        if page not in self.pages:
+            return
+        for name,frame in self.pages.items():
+            if name == page:
+                frame.grid(row=0,column=0,sticky='nsew')
+            else:
+                frame.grid_remove()
+            self.nav[name].set_selected(name==page)
+        self.current_page = page
+        if page == 'details':
+            self.refresh_history()
+
+    def refresh_history(self):
+        self.history_text.configure(state='normal')
+        self.history_text.delete('1.0','end')
+        self.history_text.insert('1.0','\n'.join(self.history) or '暂无记录')
+        self.history_text.configure(state='disabled')
+        self.history_text.see('end')
 
     def selected(self):
         index = self.device_choice.current()
@@ -278,6 +377,8 @@ class App:
         self.history = self.history[-500:]
         self.feed_history = (self.feed_history+[line])[-3:]
         self.feed.configure(text='\n'.join(self.feed_history))
+        if self.current_page == 'details':
+            self.refresh_history()
 
     def update_progress(self, event):
         stage = event['stage']
@@ -285,6 +386,7 @@ class App:
             return  # The result event is emitted only after run() returns.
         self.stage = stage
         title = event['message']
+        self.chrome_status.configure(text=title,fg=YELLOW)
         self.heading.configure(text='正在恢复原始曲线' if stage=='recovery' and event.get('total') else title)
         if title != self.last_message:
             self.add_log(title)
@@ -328,6 +430,7 @@ class App:
                     self.subheading.configure(text='打开详情查看具体原因')
                     self.notice.configure(text='请查看本地记录；如有恢复进程，请等待其结束后再重新打开工具。' if self.blocked else '未能完成检测，可更换接口或重新检测。', fg=RED)
                     self.add_log(value['message'])
+                    self.chrome_status.configure(text='操作未完成',fg='#ff9a80')
                     self.started = None
                     self.set_controls()
         except queue.Empty:
@@ -353,12 +456,14 @@ class App:
                 self.notice.configure(text='已恢复屏幕状态，可查看记录后重新检查。' if not self.blocked else '无法确认恢复，请查看记录，断电重连屏幕后重新打开工具。', fg=MUTED if not self.blocked else RED)
                 self.add_log('独立恢复完成' if not self.blocked else '独立恢复未确认：'+str(result))
                 self.started = None
+                self.chrome_status.configure(text='恢复完成' if not self.blocked else '恢复未确认',fg='#a2aea2')
                 self.set_controls()
         self.poll_after = self.root.after(80, self.poll)
 
     def show_devices(self, rows):
         self.tasks.busy = False
         self.started = None
+        self.chrome_status.configure(text='就绪',fg='#a2aea2')
         self.bar.stop()
         self.bar.configure(mode='determinate', value=0)
         self.percent.configure(text='—', fg=YELLOW)
@@ -391,6 +496,7 @@ class App:
         self.tasks.busy = False
         self.started = None
         self.stage = 'done' if report['success'] else 'failed'
+        self.chrome_status.configure(text='操作完成' if report['success'] else '操作未完成',fg=YELLOW if report['success'] else '#ff9a80')
         if report['success']:
             high = report['after'] == 'fixed_high'
             title = '检查通过' if self.action == 'check' else ('高亮度已锁定' if high else '已恢复自适应')
@@ -421,41 +527,10 @@ class App:
         self.set_controls()
 
     def details(self):
-        window = tk.Toplevel(self.root)
-        window.title('LumaLock · 操作详情')
-        window.geometry('840x480')
-        frame = tk.Frame(window, bg=BG, padx=18, pady=18)
-        frame.pack(fill='both', expand=True)
-        self.label(frame, '本次会话记录', 16, bold=True).pack(anchor='w', pady=(0, 10))
-        text = tk.Text(frame, bg=PAPER, fg=INK, relief='flat', wrap='word', font=(FONT, 10), padx=14, pady=14)
-        scroll = ttk.Scrollbar(frame, command=text.yview)
-        scroll.pack(side='right', fill='y')
-        text.configure(yscrollcommand=scroll.set)
-        text.pack(fill='both', expand=True)
-        text.insert('1.0', '\n'.join(self.history) or '暂无记录')
-        text.configure(state='disabled')
-        self.label(frame, '公开反馈时请先移除本机路径、设备标识和原始数据。', 9, MUTED).pack(anchor='w', pady=(10, 0))
+        self.show_page('details')
 
     def help(self):
-        window = tk.Toplevel(self.root)
-        window.title('LumaLock · 使用说明')
-        window.geometry('660x470')
-        frame = tk.Frame(window, bg=BG, padx=28, pady=24)
-        frame.pack(fill='both', expand=True)
-        self.label(frame, '从检查到锁定，只需两步。', 19, bold=True).pack(anchor='w', pady=(0, 16))
-        help_text = (
-            '01  选择屏幕，点击「检查兼容性」。\n'
-            '02  检查通过后，点击「固定高亮度」。\n\n'
-            '「恢复自适应」会恢复面板的原始亮度曲线。\n'
-            '设置写入运行内存，不刷固件；断电或休眠后可能需要重新应用。\n\n'
-            '进度条显示当前阶段的实际完成量。写入到 100% 后，\n'
-            '仍需等待读回校验和状态恢复，看到完成提示才能断开屏幕。\n\n'
-            '适用：通过完整核验的 NE180QDM-NZ4 / NT71873 组合。\n'
-            'Windows NVIDIA 已实测；AMD、Intel、Linux 仍属实验性。\n'
-            '操作期间不要运行其他显示器控制工具。'
-        )
-        self.label(frame, help_text, 10, justify='left', anchor='nw', wraplength=600).pack(fill='both', expand=True)
-        self.button(frame, '打开完整说明所在文件夹', lambda: open_folder(Path(__file__).resolve().parent.parent/'docs')).pack(anchor='w', pady=(12, 0))
+        self.show_page('help')
 
     def logs(self):
         try:
