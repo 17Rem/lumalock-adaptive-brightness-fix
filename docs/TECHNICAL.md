@@ -40,5 +40,15 @@ Recovery is best effort: device removal, driver failure, system shutdown or seve
 | `profile.py` | Public fingerprints and verified in-memory factory curves |
 | `control.py` | CLI operations, transaction state and watchdog |
 | `runtime.py` | State location, locks and process options |
+| `progress.py` | Optional structured events; observer exceptions cannot interrupt hardware operations |
+| `gui.py` | Native Tk UI, one worker thread and queue-based progress delivery |
 
 See [backend notes](BACKENDS.md) for platform requirements and transport differences. Only Windows NVIDIA has been tested on physical hardware so far.
+
+## GUI progress and concurrency
+
+The GUI uses the same `control.run()` transaction as the CLI. Tk widgets are updated only on the main thread; driver calls and verification run in one non-daemon worker thread. Controls remain disabled until the UI consumes the final result. Window closing is deferred during active work and pending watchdog recovery.
+
+Firmware progress advances only after a full block and both halves pass verification. Write progress advances only after each packet returns successfully. Recovery counts attempted packets and subsequently verifies the full original table. No overall percentage or completion ETA is fabricated. A write-stage 100% is followed by readback and cleanup; only the transaction's final result can produce a success state.
+
+The Windows `LumaLock.pyw` entry launches without a console. `python -m lumalock` with no arguments also opens the GUI; explicit CLI actions do not import Tk. GUI tests mock transport access and skip widget checks where Tk or a display server is unavailable.

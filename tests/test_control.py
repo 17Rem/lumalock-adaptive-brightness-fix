@@ -38,13 +38,13 @@ class ControlTests(unittest.TestCase):
         self.patch=patch.object(p,'DATA',manifest()[0]);self.patch.start();self.addCleanup(self.patch.stop)
         p.install_tables(ORIGINAL,HIGH)
 
-    def case(self,action,initial,fail_write=None,fail_close=False,firmware_ok=True):
+    def case(self,action,initial,fail_write=None,fail_close=False,firmware_ok=True,on_progress=None):
         fake=Fake(initial,fail_write,fail_close)
         def close(t):
             if t.fail_close:t.fail_close=False;return {'native_restored':False}
             t.extended=False;t.native_state=0
             return {'restricted_window_observed':True,'native_restored':True,'baseline_after':p.BASELINE.hex()}
-        def firmware(t,deadline,mark):
+        def firmware(t,deadline,mark,on_progress=None):
             if not firmware_ok:raise RuntimeError('Firmware mismatch')
             mark()
             if firmware_ok=='after_bank':raise RuntimeError('Later firmware mismatch')
@@ -60,7 +60,7 @@ class ControlTests(unittest.TestCase):
             stack.enter_context(patch.object(b,'stable',side_effect=lambda t,address,size,*args:p.BASELINE if address==0xc20 else b'\x0f\xff'))
             stack.enter_context(patch.object(app.subprocess,'Popen',return_value=MagicMock()))
             stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
-            report=app.run(action)
+            report=app.run(action,on_progress=on_progress)
             states=[json.loads(path.read_text(encoding='utf-8')) for path in folder.glob('*-state.json')]
             self.assertTrue(all(s['done'] for s in states))
         self.assertEqual(fake.native_state,0);self.assertFalse(fake.extended)
@@ -77,6 +77,32 @@ class ControlTests(unittest.TestCase):
         for n in (1,22,43):
             r,t=self.case('apply',ORIGINAL,fail_write=n)
             self.assertFalse(r['success']);self.assertTrue(r['rollback']['restored']);self.assertEqual(bytes(t.memory),ORIGINAL)
+
+    def test_progress_counts_completed_writes_and_finishes_after_cleanup(self):
+        events=[]
+        r,t=self.case('apply',ORIGINAL,on_progress=events.append)
+        written=[e['completed'] for e in events if e['stage']=='write']
+        self.assertEqual(written,list(range(44)))
+        stages=[e['stage'] for e in events]
+        self.assertLess(stages.index('verify'),stages.index('cleanup'))
+        self.assertEqual(stages[-1],'done')
+        self.assertTrue(events[-1]['report']['success'])
+        self.assertFalse(r['recovery_pending'])
+
+    def test_failed_write_is_not_counted_and_recovery_is_visible(self):
+        events=[]
+        r,t=self.case('apply',ORIGINAL,fail_write=4,on_progress=events.append)
+        self.assertEqual([e['completed'] for e in events if e['stage']=='write'],[0,1,2,3])
+        self.assertTrue(any(e['stage']=='recovery' for e in events))
+        self.assertEqual(events[-1]['stage'],'failed')
+        self.assertTrue(r['rollback']['restored'])
+
+    def test_broken_observer_cannot_interrupt_write_or_recovery(self):
+        def broken(event):raise RuntimeError('UI disappeared')
+        r,t=self.case('apply',ORIGINAL,on_progress=broken)
+        self.assertTrue(r['success'])
+        r,t=self.case('apply',ORIGINAL,fail_write=4,on_progress=broken)
+        self.assertTrue(r['rollback']['restored'])
 
     def test_close_failure_recovers(self):
         r,t=self.case('apply',ORIGINAL,fail_close=True)

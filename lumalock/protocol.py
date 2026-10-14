@@ -5,6 +5,7 @@ import os
 import threading
 import time
 from . import profile
+from .progress import emit
 
 EXPECTED_SINK=bytes.fromhex(profile.DATA['sink'])
 NATIVE_READS={0x102,0x700,0x701,0x702,0x720,0x721,*range(0x400,0x409)}
@@ -167,14 +168,18 @@ def window_ok(r):
     return r.get('restricted_window_observed') is True and r.get('native_restored') is True and r.get('baseline_after')==profile.BASELINE.hex()
 
 
-def recovery(t,restore_lut):
+def recovery(t,restore_lut,on_progress=None):
     report={}
     try:
         if restore_lut:
             t.range_command(1);errors=[]
-            for packet in profile.packets(profile.ORIGINAL):
+            packets=profile.packets(profile.ORIGINAL)
+            emit(on_progress,'recovery','正在恢复原始曲线',0,len(packets))
+            for index,packet in enumerate(packets,1):
                 try:t.lut_packet(packet)
                 except Exception as exc:errors.append(str(exc))
+                emit(on_progress,'recovery','正在恢复原始曲线（已尝试的数据包）',index,len(packets))
+            emit(on_progress,'recovery','正在校验恢复结果')
             report['packet_errors']=errors;report['original_table_verified']=verified_table(t,profile.ORIGINAL)
     except Exception as exc:report['lut_restore_error']=str(exc)
     finally:report['window_recovery']=restore_window(t)

@@ -31,7 +31,21 @@ Different device serial numbers and manufacturing dates are allowed. Firmware or
 
 ## Quick start
 
-Use **64-bit Python 3.10 or newer** and your GPU's driver. No pip packages are required. Intel additionally requires the official IGCL runtime. Download and extract the source, then open a terminal in this directory.
+Use **64-bit Python 3.10 or newer** and your GPU's driver. No pip packages are required. Intel additionally requires the official IGCL runtime. Download and extract the source.
+
+### Graphical interface / 图形界面
+
+**Windows: double-click `LumaLock.pyw`.** The interface opens without a command window when Python's `.pyw` association is installed. You can also run `run.cmd` without arguments, or `python -m lumalock gui`.
+
+**Windows 用户双击 `LumaLock.pyw` 即可打开界面。** 选择屏幕后，点击「检查兼容性」「固定高亮度」或「恢复自适应」。界面使用黑白灰与荧光黄的工业信息设计，支持实际进度、操作记录和错误恢复状态。
+
+Linux: run `sh ./run.sh gui` in a desktop session. The GUI uses Tkinter; some Linux distributions package it separately (for example `python3-tk` on Debian/Ubuntu). The CLI remains usable without Tk.
+
+Progress is **per stage**: verified firmware blocks and completed write packets use actual counts. Connection, readback and cleanup show activity without inventing a percentage. Reaching 100% for writing does not mean the full operation is finished; wait for the final result. Actions and window closing are blocked while a transaction or its watchdog recovery is pending.
+
+### Command line
+
+Open a terminal in this directory:
 
 Windows:
 

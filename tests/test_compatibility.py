@@ -62,9 +62,12 @@ class DiscoveryTests(unittest.TestCase):
             def read_burst(self,device,offset,size,settle):
                 address=self.page*4096+offset-0xd000
                 return rom[address:address+size]
-        t=Flash();report=d.verify_firmware(t,time.time()+20)
+        events=[]
+        t=Flash();report=d.verify_firmware(t,time.time()+20,on_progress=events.append)
         self.assertEqual(t.page,0);self.assertEqual(report['code_bytes'],32768)
         self.assertTrue(report['factory_tables_verified'])
+        self.assertEqual([e['completed'] for e in events],list(range(131)))
+        self.assertTrue(all(e['total']==130 for e in events))
     def test_wrong_firmware_never_extends_window_or_writes_lut(self):
         class Bad:
             def read_burst(self,*args):return bytes(256)

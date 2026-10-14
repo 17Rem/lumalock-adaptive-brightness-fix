@@ -6,6 +6,7 @@ independent recovery from the successful temporary high-LUT experiment.
 import sys, time, json, uuid, hashlib, subprocess, argparse
 from pathlib import Path
 from . import compatibility, profile as p, protocol as b, runtime as runtime_platform
+from .progress import emit
 STATE_ROOT=runtime_platform.state_dir()
 
 def known_table(t):
@@ -26,9 +27,9 @@ def known_table(t):
 def window_ok(r):
     return r.get('restricted_window_observed') is True and r.get('native_restored') is True and r.get('baseline_after')==p.BASELINE.hex()
 
-def recover(t,state):
+def recover(t,state,on_progress=None):
     if state['range_opened']:
-        return b.recovery(t,state['lut_write_started'])
+        return b.recovery(t,state['lut_write_started'],on_progress)
     return compatibility.close_preflight(t,state['bank_started'])
 
 def guard(path):
@@ -52,7 +53,7 @@ def guard(path):
         if t:t.unload()
         b.atomic_json(path.with_name(path.stem+'-recovery.json'),report)
 
-def run(action,display_id=None,backend='auto'):
+def run(action,display_id=None,backend='auto',on_progress=None):
     b.require(action in ('apply','restore','check'),'Unsupported action')
     b.require(not sys.flags.optimize,'Optimized Python is unsupported; unset PYTHONOPTIMIZE')
     report={'action':action,'flash_writes':False,'success':False}
@@ -63,6 +64,7 @@ def run(action,display_id=None,backend='auto'):
     lockfile=(STATE_ROOT/'brightness-control.lock').open('a+b')
     try:
         runtime_platform.lock(lockfile)
+        emit(on_progress,'discovery','正在连接并确认目标屏幕')
         t=compatibility.Transport(requested=display_id,backend=backend)
         report['target']=t.target_pin
         report['health_before']=t.health()
@@ -76,7 +78,7 @@ def run(action,display_id=None,backend='auto'):
         print(f"已识别兼容候选屏幕 {t.target_pin.get('endpoint_id',hex(t.display))}，正在核验固件与原始曲线。",flush=True)
         def mark_bank():
             state['bank_started']=True;b.atomic_json(statepath,state)
-        report['compatibility']=compatibility.verify_firmware(t,state['deadline']-180,mark_bank)
+        report['compatibility']=compatibility.verify_firmware(t,state['deadline']-180,mark_bank,on_progress=on_progress)
         target=p.TARGET if action=='apply' else p.ORIGINAL
         state['original_lut']=p.ORIGINAL.hex();state['high_lut']=p.TARGET.hex()
         b.atomic_json(statepath,state)
@@ -84,6 +86,7 @@ def run(action,display_id=None,backend='auto'):
         b.stable(t,0xc20,4,p.BASELINE)
         state['range_opened']=True;b.atomic_json(statepath,state)
         t.range_command(1)
+        emit(on_progress,'current','正在核对当前亮度曲线')
         current=known_table(t)
         report['before']='fixed_high' if current==p.TARGET else 'original'
         print('已核对显示器及当前曲线。',flush=True)
@@ -94,14 +97,19 @@ def run(action,display_id=None,backend='auto'):
         if action!='check' and current!=target:
             write_started=True;state['lut_write_started']=True;b.atomic_json(statepath,state)
             print('正在设置，请等待约一分钟，不要同时运行其他屏幕工具。',flush=True)
-            for packet in p.packets(target):
+            packets=p.packets(target)
+            emit(on_progress,'write','正在写入固定高亮度' if action=='apply' else '正在写入原始曲线',0,len(packets))
+            for index,packet in enumerate(packets,1):
                 b.require(time.time()<state['deadline']-90,'Insufficient rollback reserve')
                 t.lut_packet(packet)
+                emit(on_progress,'write','正在写入固定高亮度' if action=='apply' else '正在写入原始曲线',index,len(packets))
+            emit(on_progress,'verify','写入结束，正在完整读回校验')
             b.verified_table(t,target)
             current=target
         report['after']='fixed_high' if current==p.TARGET else 'original'
         report['table_sha256']=hashlib.sha256(current).hexdigest()
         report['verified_0c28']=b.stable(t,0xc28,2).hex()
+        emit(on_progress,'cleanup','正在恢复查询状态并检查连接')
         report['window_recovery']=b.restore_window(t)
         b.require(window_ok(report['window_recovery']),'Query window cleanup incomplete')
         report['health_after']=t.health()
@@ -110,10 +118,11 @@ def run(action,display_id=None,backend='auto'):
     except Exception as exc:
         report['error']=str(exc)
         if t and armed:
+            emit(on_progress,'recovery','操作未完成，正在恢复屏幕状态')
             # Re-initialize in case failure occurred after the normal close.
             try:
                 t.xfer(0,0x102,b'\xc0')
-                report['rollback']=recover(t,state)
+                report['rollback']=recover(t,state,on_progress)
             except Exception as recovery_error:report['rollback_error']=str(recovery_error)
     finally:
         if state:
@@ -122,6 +131,11 @@ def run(action,display_id=None,backend='auto'):
         if t:report['transactions']=t.rows;t.unload()
         if watch and state and state['done']:watch.terminate();watch.wait(timeout=3)
         log=STATE_ROOT/f'brightness-control-{tag}.json'
+        report['log_path']=str(log)
+        report['recovery_pending']=bool(state and not state['done'])
+        if report['recovery_pending']:
+            report['recovery_path']=str(statepath.with_name(statepath.stem+'-recovery.json'))
+            report['recovery_deadline']=state['deadline']
         b.atomic_json(log,report)
         lockfile.close()
     if report['success']:
@@ -134,16 +148,24 @@ def run(action,display_id=None,backend='auto'):
         print('未完成：'+report.get('error','未知错误'),flush=True)
         print('已恢复原曲线。' if report.get('rollback',{}).get('restored') and write_started else '请查看恢复记录；不要连续重试。',flush=True)
     print('记录：'+str(log),flush=True)
+    emit(on_progress,'done' if report['success'] else 'failed',
+         '操作完成' if report['success'] else '操作未完成',report=report)
     return report
 
 def main():
     b.require(not sys.flags.optimize,'Optimized Python is unsupported; unset PYTHONOPTIMIZE')
     if len(sys.argv)==3 and sys.argv[1]=='--guard':guard(Path(sys.argv[2]));return
+    if len(sys.argv)==1 or sys.argv[1:] == ['gui']:
+        from .gui import main as gui_main
+        gui_main();return
     parser=argparse.ArgumentParser(description='LumaLock: 固定匹配便携屏的亮度 / portable monitor brightness lock')
-    parser.add_argument('action',choices=('list','apply','restore','check'))
+    parser.add_argument('action',choices=('gui','list','apply','restore','check'))
     parser.add_argument('--display',help='Use the full endpoint identity shown by list')
     parser.add_argument('--backend',choices=('auto','nvidia','amd','intel','linux'),default='auto')
     args=parser.parse_args()
+    if args.action=='gui':
+        from .gui import main as gui_main
+        gui_main();return
     if args.action=='list':
         try:
             rows=compatibility.list_displays(args.backend)

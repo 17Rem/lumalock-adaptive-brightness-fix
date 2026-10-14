@@ -3,6 +3,7 @@ import hashlib
 import time
 from . import protocol as b, profile, backends as aux_backends
 from .protocol import ProtocolTransport
+from .progress import emit
 
 def read_edid(t):
     copies=[]
@@ -90,11 +91,12 @@ def expected_block(t,offset,size,expected_hash,deadline):
     raise RuntimeError(f'Firmware profile mismatch or unstable read at window {offset:04X}')
 
 
-def verify_firmware(t,deadline,bank_started=lambda:None):
+def verify_firmware(t,deadline,bank_started=lambda:None,on_progress=None):
     blocks=profile.DATA['blocks']
+    emit(on_progress,'firmware','核验固件与原厂曲线',0,len(blocks))
     expected_block(t,0xd000,256,blocks['000000']['full'],deadline)
     bank_started();previous_page=None;curves={};code=bytearray()
-    for key,hashes in blocks.items():
+    for index,(key,hashes) in enumerate(blocks.items(),1):
         address=int(key,16);page=address//4096;offset=0xd000+address%4096
         if page!=previous_page:t.select_bank(page);previous_page=page
         full=expected_block(t,offset,256,hashes['full'],deadline)
@@ -103,6 +105,7 @@ def verify_firmware(t,deadline,bank_started=lambda:None):
         b.require(full==first+second,'Independent firmware reads disagree')
         if address<0x8000:code.extend(full)
         else:curves[address]=full
+        emit(on_progress,'firmware','核验固件与原厂曲线',index,len(blocks))
     b.require(len(code)==0x8000 and profile.digest(code)==profile.DATA['code_sha256'],'Full code fingerprint mismatch')
     t.select_bank(0);expected_block(t,0xd000,256,blocks['000000']['full'],deadline)
     profile.install_tables(curves[0x29f00],curves[0x29e00])
