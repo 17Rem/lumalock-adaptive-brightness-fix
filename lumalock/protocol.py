@@ -76,7 +76,7 @@ class ProtocolTransport:
         pointer=bytes([offset]) if device==0xa0 else offset.to_bytes(2,'big')
         with self.lock:
             try:
-                self.xfer(5,device,pointer,len(pointer));time.sleep(.002)
+                self.xfer(5,device,pointer,len(pointer));time.sleep(.15 if device==0xc4 else .002)
                 if method=='split' and n>1:
                     first=n//2
                     return self.xfer(6,device,n=first)+self.xfer(3,device,n=n-first)
@@ -125,9 +125,10 @@ def stable(t,address,size,expected=None):
     copies=[]
     for method in ('settled','split'):
         previous=None;count=0
-        for _ in range(7):
+        for _ in range(20):
             value=t.read_at(0xc4,address,size,method)
-            count=count+1 if value==previous else 1;previous=value
+            count=(count+1 if value==previous else 1) if expected is None or value==expected else 0
+            previous=value
             if count==3:break
             time.sleep(.005)
         require(count==3,f'Unstable {method} read at {address:04x}')
@@ -148,15 +149,31 @@ def verified_table(t,expected):
 
 
 def restricted(t):
-    expected=t.panel_edid[:16];stable(t,0x500,16,expected)
-    return t.table(16)[:16]==expected
+    expected=t.panel_edid[:16]
+    for packet in (16,8):
+        count=0
+        for _ in range(TABLE_READ_ATTEMPTS):
+            # Prime the known response again on every attempt. A rejected
+            # out-of-range pointer must retain that response in restricted mode.
+            stable(t,0x500,16,expected)
+            count=count+1 if t.table(packet)[:16]==expected else 0
+            if count==3:break
+        if count!=3:return False
+    return True
 
 
 def restore_window(t):
     report={}
     try:
-        t.range_command(0);report['restricted_window_observed']=restricted(t)
-        report['baseline_after']=stable(t,0xc20,4,profile.BASELINE).hex()
+        for attempt in range(1,4):
+            report['attempts']=attempt
+            try:
+                t.range_command(0);report['restricted_window_observed']=restricted(t)
+                report['baseline_after']=stable(t,0xc20,4,profile.BASELINE).hex()
+                if report['restricted_window_observed']:
+                    report.pop('window_error',None)
+                    break
+            except Exception as exc:report['window_error']=str(exc)
     except Exception as exc:report['window_error']=str(exc)
     finally:
         try:t.xfer(0,0x102,b'\x00');report['native_restored']=t.native(0x102)==0

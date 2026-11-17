@@ -5,6 +5,7 @@ import sys
 
 root = Path(SPECPATH)
 datas = [
+    (str(root / 'lumalock/assets/lumalock.ico'), 'lumalock/assets'),
     (str(root / 'lumalock/profiles/ne180qdm_nz4.json'), 'lumalock/profiles'),
     (str(root / 'LICENSE'), '.'),
     (str(root / 'THIRD_PARTY_NOTICES.md'), '.'),
@@ -30,5 +31,5 @@ a = Analysis(['LumaLock.pyw'], pathex=[str(root)], binaries=[], datas=datas,
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='LumaLock',
           debug=False, bootloader_ignore_signals=False, strip=False, upx=False,
-          console=False, disable_windowed_traceback=False)
+          console=False, disable_windowed_traceback=False, icon=str(root / 'lumalock/assets/lumalock.ico'))
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='LumaLock')

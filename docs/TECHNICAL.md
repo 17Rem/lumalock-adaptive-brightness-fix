@@ -55,3 +55,7 @@ Firmware progress advances only after a full block and both halves pass verifica
 The Windows `LumaLock.pyw` entry launches without a console. `python -m lumalock` with no arguments also opens the GUI; explicit CLI actions do not import Tk. GUI tests mock transport access and skip widget checks where Tk or a display server is unavailable.
 
 On Windows the frameless shell removes only the caption and sizing frame from its own native window. It remains managed by the window manager for taskbar, minimize/restore and maximize support. Other Tk desktop platforms use override-redirect with a managed transition for minimizing. The bottom-right grip provides resizing. Control, help and history are persistent frames, so navigation cannot recreate a transaction or discard progress. Hover animation changes presentation only and respects disabled button state.
+
+## 0.2.3 query cleanup and telemetry
+
+Register-pointer reads now allow 150 ms for panel replies. Expected register values must match three consecutive times in each read method, within a bounded retry budget. Restricted-window checks prime the known EDID response again on each attempt and require three consecutive matches with both packet sizes. Closing the query window retries at most three times; persistent failures still trigger rollback. Full LUT verification is unchanged. Adaptive-mode 0C28 telemetry is not required to remain constant when restoring or checking the original curve. Fixed-high mode still requires 0FFF. Reports record application version and executable path.

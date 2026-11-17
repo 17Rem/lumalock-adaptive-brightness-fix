@@ -38,8 +38,15 @@ class ControlTests(unittest.TestCase):
         self.patch=patch.object(p,'DATA',manifest()[0]);self.patch.start();self.addCleanup(self.patch.stop)
         p.install_tables(ORIGINAL,HIGH)
 
-    def case(self,action,initial,fail_write=None,fail_close=False,firmware_ok=True,on_progress=None):
+    def case(self,action,initial,fail_write=None,fail_close=False,firmware_ok=True,on_progress=None,extended=False,interrupt=False):
         fake=Fake(initial,fail_write,fail_close)
+        fake.extended=extended
+        if interrupt:
+            original_write=fake.lut_packet
+            def interrupted_write(data):
+                original_write(data)
+                if fake.writes==2:raise KeyboardInterrupt()
+            fake.lut_packet=interrupted_write
         def close(t):
             if t.fail_close:t.fail_close=False;return {'native_restored':False}
             t.extended=False;t.native_state=0
@@ -78,6 +85,16 @@ class ControlTests(unittest.TestCase):
             r,t=self.case('apply',ORIGINAL,fail_write=n)
             self.assertFalse(r['success']);self.assertTrue(r['rollback']['restored']);self.assertEqual(bytes(t.memory),ORIGINAL)
 
+    def test_leftover_extended_window_is_normalized(self):
+        for action,initial,expected,count in [('check',HIGH,HIGH,0),('apply',ORIGINAL,HIGH,43),('restore',HIGH,ORIGINAL,43)]:
+            r,t=self.case(action,initial,extended=True)
+            self.assertTrue(r['success']);self.assertEqual(bytes(t.memory),expected);self.assertEqual(t.writes,count)
+
+    def test_keyboard_interrupt_records_error_and_rolls_back(self):
+        r,t=self.case('apply',ORIGINAL,interrupt=True)
+        self.assertFalse(r['success']);self.assertEqual(r['error'],'KeyboardInterrupt')
+        self.assertTrue(r['rollback']['restored']);self.assertEqual(bytes(t.memory),ORIGINAL)
+
     def test_progress_counts_completed_writes_and_finishes_after_cleanup(self):
         events=[]
         r,t=self.case('apply',ORIGINAL,on_progress=events.append)
@@ -111,6 +128,11 @@ class ControlTests(unittest.TestCase):
     def test_unknown_active_curve_not_written(self):
         r,t=self.case('apply',bytes(256))
         self.assertFalse(r['success']);self.assertEqual(t.writes,0)
+
+    def test_adaptive_telemetry_not_used_as_restoration_gate(self):
+        r,t=self.case('restore',HIGH)
+        self.assertTrue(r['success']);self.assertNotIn('verified_0c28',r)
+        self.assertIn('telemetry_note',r)
 
     def test_firmware_failure_never_writes_lut(self):
         for stage in (False,'after_bank'):

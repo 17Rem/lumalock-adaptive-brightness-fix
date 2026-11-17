@@ -74,7 +74,9 @@ class App:
         self.last_message = None
         self.pending = None
         self.blocked = False
-        self.root.title('LumaLock · 便携屏亮度控制')
+        self.root.title(f'LumaLock {__version__} · 便携屏亮度控制')
+        icon = Path(__file__).resolve().parent / 'assets' / 'lumalock.ico'
+        if os.name == 'nt' and icon.exists():self.root.iconbitmap(str(icon))
         self.root.configure(bg=BG)
         self.root.geometry('1180x858')
         self.root.minsize(1040, 798)
@@ -108,7 +110,7 @@ class App:
         titlebar = tk.Frame(self.root,bg=INK,height=38)
         titlebar.pack(fill='x')
         titlebar.pack_propagate(False)
-        title = self.label(titlebar,'◼  LUMALOCK / DISPLAY UTILITY',9,YELLOW,mono=True)
+        title = self.label(titlebar,f'◼  LumaLock {__version__} / DISPLAY UTILITY',9,YELLOW,mono=True)
         title.pack(side='left',padx=20)
         self.chrome_status = self.label(titlebar,'就绪',9,'#a2aea2')
         self.chrome_status.pack(side='left',padx=20)

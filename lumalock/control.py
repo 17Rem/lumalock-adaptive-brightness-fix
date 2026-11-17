@@ -7,6 +7,7 @@ import sys, time, json, uuid, hashlib, subprocess, argparse
 from pathlib import Path
 from . import compatibility, profile as p, protocol as b, runtime as runtime_platform
 from .progress import emit
+from . import __version__
 STATE_ROOT=runtime_platform.state_dir()
 
 def known_table(t):
@@ -56,7 +57,7 @@ def guard(path):
 def run(action,display_id=None,backend='auto',on_progress=None):
     b.require(action in ('apply','restore','check'),'Unsupported action')
     b.require(not sys.flags.optimize,'Optimized Python is unsupported; unset PYTHONOPTIMIZE')
-    report={'action':action,'flash_writes':False,'success':False}
+    report={'action':action,'flash_writes':False,'success':False,'app_version':__version__,'executable':sys.executable}
     tag=uuid.uuid4().hex[:12]
     STATE_ROOT.mkdir(parents=True,exist_ok=True)
     statepath=STATE_ROOT/f'brightness-control-{tag}-state.json'
@@ -83,7 +84,12 @@ def run(action,display_id=None,backend='auto',on_progress=None):
         report['compatibility']=compatibility.verify_firmware(t,state['deadline']-180,mark_bank,on_progress=on_progress)
         target=p.TARGET if action=='apply' else p.ORIGINAL
         state['original_lut']=p.ORIGINAL.hex();state['high_lut']=p.TARGET.hex()
+        # An interrupted run can leave the volatile FF10 query range open.
+        # Firmware/table identity must be verified before normalizing it.
+        state['range_opened']=True
         b.atomic_json(statepath,state)
+        emit(on_progress,'current','正在恢复并核验查询窗口')
+        t.range_command(0)
         b.require(b.restricted(t),'Unexpected initial query window')
         b.stable(t,0xc20,4,p.BASELINE)
         state['range_opened']=True;b.atomic_json(statepath,state)
@@ -110,21 +116,28 @@ def run(action,display_id=None,backend='auto',on_progress=None):
             current=target
         report['after']='fixed_high' if current==p.TARGET else 'original'
         report['table_sha256']=hashlib.sha256(current).hexdigest()
-        report['verified_0c28']=b.stable(t,0xc28,2).hex()
+        if current==p.TARGET:
+            report['verified_0c28']=b.stable(t,0xc28,2,bytes.fromhex('0fff')).hex()
+        else:
+            # Adaptive-mode telemetry changes with the picture; the fully
+            # verified LUT, not a stationary telemetry value, proves restoration.
+            report['telemetry_note']='Adaptive brightness is dynamic; stable 0c28 not required'
         emit(on_progress,'cleanup','正在恢复查询状态并检查连接')
         report['window_recovery']=b.restore_window(t)
         b.require(window_ok(report['window_recovery']),'Query window cleanup incomplete')
         report['health_after']=t.health()
         b.require(report['health_after']==report['health_before'],'Link health changed')
         report['success']=True
-    except Exception as exc:
-        report['error']=str(exc)
+    except (Exception, KeyboardInterrupt) as exc:
+        report['error']=str(exc) or type(exc).__name__
         if t and armed:
             emit(on_progress,'recovery','操作未完成，正在恢复屏幕状态')
             # Re-initialize in case failure occurred after the normal close.
             try:
                 t.xfer(0,0x102,b'\xc0')
                 report['rollback']=recover(t,state,on_progress)
+                if write_started and report['rollback'].get('restored'):
+                    report['after']='original'
             except Exception as recovery_error:report['rollback_error']=str(recovery_error)
     finally:
         if state:

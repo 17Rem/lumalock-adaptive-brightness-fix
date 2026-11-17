@@ -71,14 +71,14 @@ def main():
                 assert app.poll() is None, 'GUI exited during startup'
                 windows.clear()
                 user.EnumWindows(collect, 0)
-                if any(title == 'LumaLock · 便携屏亮度控制' for _, title in windows):
+                if any(title.startswith('LumaLock ') and title.endswith(' · 便携屏亮度控制') for _, title in windows):
                     break
                 time.sleep(.25)
             else:
                 raise AssertionError('No application window appeared: '+repr(windows))
             time.sleep(3)
             for hwnd, title in windows:
-                if title == 'LumaLock · 便携屏亮度控制':
+                if title.startswith('LumaLock ') and title.endswith(' · 便携屏亮度控制'):
                     user.PostMessageW(hwnd, 0x0010, 0, 0)
             assert app.wait(timeout=20) == 0, 'GUI failed during normal close'
         finally:
